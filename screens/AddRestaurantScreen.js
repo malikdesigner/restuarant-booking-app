@@ -1,5 +1,5 @@
-// screens/AddRestaurantScreen.js - Updated with restaurant types
-import React, { useState } from 'react';
+// screens/AddRestaurantScreen.js - Updated with WebView-based map
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,9 +16,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import MapView, { Marker } from 'react-native-maps';
+import { WebView } from 'react-native-webview';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { getAllRestaurantTypes, getRestaurantTypeColor, getComplementaryColor } from '../utils/restaurantTypes';
 
 const { width, height } = Dimensions.get('window');
 
@@ -30,6 +31,7 @@ export default function AddRestaurantScreen({ navigation }) {
   const [imageUri, setImageUri] = useState(null);
   const [showMapPicker, setShowMapPicker] = useState(false);
   const [tempLocation, setTempLocation] = useState(null);
+  const webViewRef = useRef(null);
   const [formData, setFormData] = useState({
     name: '',
     cuisine: '',
@@ -48,19 +50,8 @@ export default function AddRestaurantScreen({ navigation }) {
     'BBQ', 'Seafood', 'Continental', 'Desi', 'Karahi'
   ];
 
-  const restaurantTypes = [
-    { name: 'Go Green', color: '#4CAF50' },
-    { name: 'Fine Dining', color: '#8E24AA' },
-    { name: 'Casual Dining', color: '#FF7043' },
-    { name: 'Cafe', color: '#795548' },
-    { name: 'Fast Food', color: '#F44336' },
-    { name: 'Buffet', color: '#FF9800' },
-    { name: 'Food Truck', color: '#2196F3' },
-    { name: 'Bakery', color: '#FFEB3B' },
-    { name: 'Dessert Shop', color: '#E91E63' },
-    { name: 'Bar', color: '#9C27B0' },
-    { name: 'Pub', color: '#607D8B' }
-  ];
+  // Get restaurant types from utility
+  const restaurantTypes = getAllRestaurantTypes();
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -289,13 +280,389 @@ export default function AddRestaurantScreen({ navigation }) {
     }
   };
 
-  // Function to open map picker
-  const openMapPicker = (lat, lng) => {
-    setTempLocation({
-      latitude: lat || 33.6844,
-      longitude: lng || 73.0479
-    });
+  // Function to open map picker - prioritize current location
+  const openMapPicker = async (lat, lng) => {
+    let initialLocation = { latitude: 33.6844, longitude: 73.0479 }; // Fallback
+
+    try {
+      // First try to get fresh current location
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const location = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+          timeout: 10000,
+        });
+        
+        if (location?.coords?.latitude && location?.coords?.longitude) {
+          initialLocation = {
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude
+          };
+          console.log('Using fresh current location for map picker:', initialLocation);
+        }
+      }
+    } catch (error) {
+      console.log('Could not get fresh location, using provided or fallback coordinates');
+      // Use provided coordinates if available
+      if (lat && lng) {
+        initialLocation = { latitude: lat, longitude: lng };
+      }
+    }
+
+    setTempLocation(initialLocation);
     setShowMapPicker(true);
+  };
+
+  // Generate map HTML for location picker
+  const generateMapPickerHTML = () => {
+    const centerLat = tempLocation?.latitude || 33.6844;
+    const centerLng = tempLocation?.longitude || 73.0479;
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+          <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+          <style>
+            #map { 
+              height: 100vh; 
+              margin: 0; 
+              padding: 0; 
+              width: 100%;
+            }
+            html, body { 
+              margin: 0; 
+              padding: 0; 
+              height: 100%;
+            }
+            .location-marker {
+              background: #FF6B35;
+              border: 3px solid white;
+              border-radius: 50%;
+              width: 25px;
+              height: 25px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 16px;
+              font-weight: bold;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+              cursor: move;
+            }
+            .user-location-marker {
+              background: #2196F3;
+              border: 2px solid white;
+              border-radius: 50%;
+              width: 20px;
+              height: 20px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white;
+              font-size: 12px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            .my-location-button {
+              position: absolute;
+              bottom: 20px;
+              right: 20px;
+              background: white;
+              border: 2px solid #ddd;
+              border-radius: 50%;
+              width: 50px;
+              height: 50px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+              z-index: 1000;
+              font-size: 20px;
+              transition: all 0.2s ease;
+            }
+            .my-location-button:hover {
+              background: #f5f5f5;
+              border-color: #2196F3;
+            }
+            .my-location-button:active {
+              background: #2196F3;
+              color: white;
+            }
+            .info-popup {
+              padding: 10px;
+              background: white;
+              border-radius: 8px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+              max-width: 200px;
+            }
+            .coordinates {
+              font-size: 12px;
+              color: #666;
+              margin-top: 5px;
+            }
+          </style>
+        </head>
+        <body>
+          <div id="map"></div>
+          <div class="my-location-button" id="myLocationBtn" title="Go to my location">
+            🎯
+          </div>
+          <script>
+            let map;
+            let marker;
+            let userLocationMarker;
+            let currentPosition = [${centerLat}, ${centerLng}];
+            let userLocation = null;
+
+            function initMap() {
+              map = L.map('map').setView(currentPosition, 15);
+              
+              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+              }).addTo(map);
+
+              // Try to get user's current location for reference
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  function(position) {
+                    userLocation = [position.coords.latitude, position.coords.longitude];
+                    addUserLocationMarker(userLocation);
+                    
+                    // If we're still at fallback location, center on user location
+                    if (currentPosition[0] === 33.6844 && currentPosition[1] === 73.0479) {
+                      currentPosition = userLocation;
+                      map.setView(currentPosition, 15);
+                      updateRestaurantMarker(currentPosition);
+                      notifyPositionChange(currentPosition[0], currentPosition[1]);
+                    }
+                  },
+                  function(error) {
+                    console.log('Could not get user location:', error);
+                  },
+                  { timeout: 10000, enableHighAccuracy: true }
+                );
+              }
+
+              // Create draggable restaurant location marker
+              updateRestaurantMarker(currentPosition);
+
+              // Add click handler to map
+              map.on('click', function(e) {
+                const newPos = [e.latlng.lat, e.latlng.lng];
+                currentPosition = newPos;
+                updateRestaurantMarker(newPos);
+                notifyPositionChange(e.latlng.lat, e.latlng.lng);
+              });
+
+              // Add my location button handler
+              document.getElementById('myLocationBtn').addEventListener('click', goToMyLocation);
+
+              // Notify React Native that map is ready
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'mapReady'
+                }));
+              }
+            }
+
+            function addUserLocationMarker(position) {
+              if (userLocationMarker) {
+                map.removeLayer(userLocationMarker);
+              }
+
+              const userLocationIcon = L.divIcon({
+                className: 'user-location-marker',
+                html: '📍',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+              });
+
+              userLocationMarker = L.marker(position, { icon: userLocationIcon });
+              userLocationMarker.bindPopup('Your current location');
+              userLocationMarker.addTo(map);
+            }
+
+            function updateRestaurantMarker(position) {
+              if (marker) {
+                map.removeLayer(marker);
+              }
+
+              const markerIcon = L.divIcon({
+                className: 'location-marker',
+                html: '🏪',
+                iconSize: [25, 25],
+                iconAnchor: [12, 12]
+              });
+
+              marker = L.marker(position, { 
+                icon: markerIcon,
+                draggable: true 
+              });
+              
+              marker.bindPopup(\`
+                <div class="info-popup">
+                  <strong>Restaurant Location</strong>
+                  <div class="coordinates">
+                    Lat: \${position[0].toFixed(6)}<br/>
+                    Lng: \${position[1].toFixed(6)}
+                  </div>
+                </div>
+              \`);
+
+              marker.on('dragend', function(e) {
+                const newPos = e.target.getLatLng();
+                currentPosition = [newPos.lat, newPos.lng];
+                notifyPositionChange(newPos.lat, newPos.lng);
+                
+                marker.setPopupContent(\`
+                  <div class="info-popup">
+                    <strong>Restaurant Location</strong>
+                    <div class="coordinates">
+                      Lat: \${newPos.lat.toFixed(6)}<br/>
+                      Lng: \${newPos.lng.toFixed(6)}
+                    </div>
+                  </div>
+                \`);
+              });
+
+              marker.addTo(map);
+            }
+
+            function goToMyLocation() {
+              if (!navigator.geolocation) {
+                alert('Location services are not supported by this browser. Please use a modern browser with location support.');
+                return;
+              }
+
+              const btn = document.getElementById('myLocationBtn');
+              btn.style.background = '#2196F3';
+              btn.style.color = 'white';
+              
+              navigator.geolocation.getCurrentPosition(
+                function(position) {
+                  const newUserLocation = [position.coords.latitude, position.coords.longitude];
+                  userLocation = newUserLocation;
+                  
+                  // Update or add user location marker
+                  addUserLocationMarker(newUserLocation);
+                  
+                  // Center map on user location
+                  map.setView(newUserLocation, 16);
+                  
+                  // Reset button style
+                  setTimeout(() => {
+                    btn.style.background = 'white';
+                    btn.style.color = 'black';
+                  }, 500);
+                },
+                function(error) {
+                  console.error('Error getting location:', error);
+                  let message = '';
+                  
+                  switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                      message = 'Location access was denied. Please enable location permissions in your browser settings and try again.\\n\\nTo enable:\\n• Click the location icon in your browser\\'s address bar\\n• Select "Always allow location access"\\n• Refresh the page';
+                      break;
+                    case error.POSITION_UNAVAILABLE:
+                      message = 'Location information is unavailable. Please check that location services are enabled on your device and try again.';
+                      break;
+                    case error.TIMEOUT:
+                      message = 'Location request timed out. Please ensure you have a good GPS signal and try again.';
+                      break;
+                    default:
+                      message = 'An unknown error occurred while getting your location. Please check your location settings and try again.';
+                      break;
+                  }
+                  
+                  alert(message);
+                  
+                  // Reset button style
+                  btn.style.background = 'white';
+                  btn.style.color = 'black';
+                },
+                { 
+                  timeout: 15000, 
+                  enableHighAccuracy: true, 
+                  maximumAge: 60000 
+                }
+              );
+            }
+
+            function notifyPositionChange(lat, lng) {
+              if (window.ReactNativeWebView) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  type: 'locationUpdate',
+                  latitude: lat,
+                  longitude: lng
+                }));
+              }
+            }
+
+            function setMapCenter(lat, lng) {
+              const newPos = [lat, lng];
+              currentPosition = newPos;
+              map.setView(newPos, 15);
+              updateRestaurantMarker(newPos);
+            }
+
+            // Handle messages from React Native
+            document.addEventListener('message', function(event) {
+              try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'setCenter') {
+                  setMapCenter(message.latitude, message.longitude);
+                }
+              } catch (error) {
+                console.error('Error handling message:', error);
+              }
+            });
+
+            // For Android
+            window.addEventListener('message', function(event) {
+              try {
+                const message = JSON.parse(event.data);
+                if (message.type === 'setCenter') {
+                  setMapCenter(message.latitude, message.longitude);
+                }
+              } catch (error) {
+                console.error('Error handling message:', error);
+              }
+            });
+
+            // Initialize map when page loads
+            initMap();
+          </script>
+        </body>
+      </html>
+    `;
+  };
+
+  const handleMapMessage = (event) => {
+    try {
+      const message = JSON.parse(event.nativeEvent.data);
+      
+      if (message.type === 'locationUpdate') {
+        setTempLocation({
+          latitude: message.latitude,
+          longitude: message.longitude
+        });
+      } else if (message.type === 'mapReady') {
+        console.log('Map picker ready');
+        if (tempLocation && webViewRef.current) {
+          const centerMessage = JSON.stringify({
+            type: 'setCenter',
+            latitude: tempLocation.latitude,
+            longitude: tempLocation.longitude
+          });
+          webViewRef.current.postMessage(centerMessage);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling map message:', error);
+    }
   };
 
   // Handle map picker selection
@@ -584,24 +951,33 @@ export default function AddRestaurantScreen({ navigation }) {
           <Text style={styles.sectionTitle}>Restaurant Type</Text>
           <Text style={styles.sectionSubtitle}>Choose the type that best describes your restaurant</Text>
           <View style={styles.typeGrid}>
-            {restaurantTypes.map((type) => (
-              <TouchableOpacity
-                key={type.name}
-                style={[
-                  styles.typeChip,
-                  formData.type === type.name && { ...styles.selectedTypeChip, backgroundColor: type.color }
-                ]}
-                onPress={() => handleInputChange('type', type.name)}
-              >
-                <View style={[styles.typeColorIndicator, { backgroundColor: type.color }]} />
-                <Text style={[
-                  styles.typeChipText,
-                  formData.type === type.name && styles.selectedTypeChipText
-                ]}>
-                  {type.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {restaurantTypes.map((type) => {
+              const textColor = getComplementaryColor(type.name);
+              return (
+                <TouchableOpacity
+                  key={type.name}
+                  style={[
+                    styles.typeChip,
+                    formData.type === type.name && { 
+                      ...styles.selectedTypeChip, 
+                      backgroundColor: type.color 
+                    }
+                  ]}
+                  onPress={() => handleInputChange('type', type.name)}
+                >
+                  <View style={[styles.typeColorIndicator, { backgroundColor: type.color }]} />
+                  <Text style={[
+                    styles.typeChipText,
+                    formData.type === type.name && { 
+                      ...styles.selectedTypeChipText, 
+                      color: textColor 
+                    }
+                  ]}>
+                    {type.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
@@ -668,10 +1044,23 @@ export default function AddRestaurantScreen({ navigation }) {
 
             <TouchableOpacity
               style={styles.mapButton}
-              onPress={() => openMapPicker(formData.latitude, formData.longitude)}
+              onPress={() => {
+                // Show loading indicator while getting location
+                setLocationLoading(true);
+                openMapPicker(formData.latitude, formData.longitude).finally(() => {
+                  setLocationLoading(false);
+                });
+              }}
+              disabled={locationLoading}
             >
-              <Ionicons name="map" size={20} color="#2196F3" style={styles.locationIcon} />
-              <Text style={styles.mapButtonText}>Pick on Map</Text>
+              {locationLoading ? (
+                <ActivityIndicator size="small" color="#2196F3" />
+              ) : (
+                <>
+                  <Ionicons name="map" size={20} color="#2196F3" style={styles.locationIcon} />
+                  <Text style={styles.mapButtonText}>Pick on Map</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -746,7 +1135,7 @@ export default function AddRestaurantScreen({ navigation }) {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Map Picker Modal */}
+      {/* Map Picker Modal with WebView */}
       <Modal
         visible={showMapPicker}
         animationType="slide"
@@ -769,32 +1158,39 @@ export default function AddRestaurantScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <MapView
+          <WebView
+            ref={webViewRef}
+            source={{ html: generateMapPickerHTML() }}
             style={styles.mapPickerMap}
-            initialRegion={{
-              latitude: tempLocation?.latitude || 33.6844,
-              longitude: tempLocation?.longitude || 73.0479,
-              latitudeDelta: 0.01,
-              longitudeDelta: 0.01,
+            onMessage={handleMapMessage}
+            onError={(syntheticEvent) => {
+              const { nativeEvent } = syntheticEvent;
+              console.error('WebView error: ', nativeEvent);
+              Alert.alert('Map Error', 'There was an issue loading the map. Please try again.');
             }}
-            onPress={(e) => setTempLocation(e.nativeEvent.coordinate)}
-          >
-            {tempLocation && (
-              <Marker
-                coordinate={tempLocation}
-                draggable
-                onDragEnd={(e) => setTempLocation(e.nativeEvent.coordinate)}
-              >
-                <View style={styles.mapPickerMarkerContainer}>
-                  <Ionicons name="location" size={30} color="#FF6B35" />
-                </View>
-              </Marker>
+            onLoadEnd={() => {
+              console.log('Map picker WebView loaded');
+            }}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            startInLoadingState={true}
+            renderLoading={() => (
+              <View style={styles.webViewLoading}>
+                <ActivityIndicator size="large" color="#FF6B35" />
+                <Text>Loading map...</Text>
+              </View>
             )}
-          </MapView>
+          />
 
           <View style={styles.mapPickerInstructions}>
             <Text style={styles.mapPickerInstructionsText}>
-              Tap on the map or drag the marker to select your restaurant's exact location
+              {tempLocation && (tempLocation.latitude !== 33.6844 || tempLocation.longitude !== 73.0479)
+                ? "Blue pin shows your current location. Orange pin is your restaurant location."
+                : "Tap on the map or drag the orange marker to select your restaurant's exact location"
+              }
+            </Text>
+            <Text style={styles.mapPickerInstructionsSubtext}>
+              Drag the orange marker or tap anywhere to set the precise location
             </Text>
             {tempLocation && (
               <Text style={styles.mapPickerCoordinatesText}>
@@ -1003,7 +1399,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   selectedTypeChipText: {
-    color: '#fff',
     fontWeight: 'bold',
   },
   locationButtons: {
@@ -1129,6 +1524,12 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
   },
+  webViewLoading: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+  },
   // Map Picker Styles
   mapPickerContainer: {
     flex: 1,
@@ -1158,10 +1559,6 @@ const styles = StyleSheet.create({
   mapPickerMap: {
     flex: 1,
   },
-  mapPickerMarkerContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   mapPickerInstructions: {
     padding: 20,
     backgroundColor: '#f8f8f8',
@@ -1171,6 +1568,12 @@ const styles = StyleSheet.create({
   mapPickerInstructionsText: {
     fontSize: 14,
     color: '#666',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  mapPickerInstructionsSubtext: {
+    fontSize: 12,
+    color: '#999',
     textAlign: 'center',
     marginBottom: 10,
   },

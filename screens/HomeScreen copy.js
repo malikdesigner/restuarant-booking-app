@@ -1,5 +1,5 @@
-// screens/HomeScreen.js - Updated with WebView-based map
-import React, { useState, useEffect, useRef } from 'react';
+// screens/HomeScreen.js - Updated with restaurant type filtering
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -13,18 +13,11 @@ import {
   Alert,
   ScrollView
 } from 'react-native';
-import { WebView } from 'react-native-webview';
+import MapView, { Marker } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
-import { 
-  RESTAURANT_TYPE_COLORS, 
-  getRestaurantTypeColor,
-  getAllRestaurantTypes,
-  getRestaurantTypeInfo,
-  getComplementaryColor
-} from '../utils/restaurantTypes';
 
 const { width, height } = Dimensions.get('window');
 
@@ -36,7 +29,20 @@ const FALLBACK_REGION = {
   longitudeDelta: 0.1,
 };
 
-  // Remove the local RESTAURANT_TYPE_COLORS definition since we're importing it
+// Restaurant type colors mapping
+const RESTAURANT_TYPE_COLORS = {
+  'Go Green': '#4CAF50',
+  'Fine Dining': '#8E24AA',
+  'Casual Dining': '#FF7043',
+  'Cafe': '#795548',
+  'Fast Food': '#F44336',
+  'Buffet': '#FF9800',
+  'Food Truck': '#2196F3',
+  'Bakery': '#FFEB3B',
+  'Dessert Shop': '#E91E63',
+  'Bar': '#9C27B0',
+  'Pub': '#607D8B'
+};
 
 export default function HomeScreen({ navigation }) {
   const { restaurants, loading, toggleFavorite } = useData();
@@ -44,11 +50,10 @@ export default function HomeScreen({ navigation }) {
   const [showMap, setShowMap] = useState(true);
   const [userLocation, setUserLocation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState('All');
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState('All'); // New state for type filter
   const [filteredRestaurants, setFilteredRestaurants] = useState([]);
   const [mapRegion, setMapRegion] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
-  const webViewRef = useRef(null);
   
   useEffect(() => {
     getUserLocation();
@@ -56,14 +61,7 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     filterRestaurants();
-  }, [restaurants, searchQuery, selectedTypeFilter]);
-
-  useEffect(() => {
-    // Update map when filtered restaurants change
-    if (webViewRef.current && filteredRestaurants.length > 0 && showMap) {
-      updateMapMarkers();
-    }
-  }, [filteredRestaurants, userLocation, showMap]);
+  }, [restaurants, searchQuery, selectedTypeFilter]); // Added selectedTypeFilter dependency
 
   const getUserLocation = async () => {
     try {
@@ -190,300 +188,9 @@ export default function HomeScreen({ navigation }) {
            restaurant.location.longitude <= 180;
   };
 
-  // Use the imported function directly - remove the local wrapper
-
-  const updateMapMarkers = () => {
-    if (!webViewRef.current || !mapRegion) return;
-
-    const validRestaurants = filteredRestaurants.filter(isValidRestaurant);
-    
-    const mapData = {
-      center: [mapRegion.latitude, mapRegion.longitude],
-      userLocation: userLocation ? [userLocation.latitude, userLocation.longitude] : null,
-      restaurants: validRestaurants.map(restaurant => ({
-        id: restaurant.id,
-        name: restaurant.name,
-        position: [restaurant.location.latitude, restaurant.location.longitude],
-        type: restaurant.type || 'Restaurant',
-        cuisine: restaurant.cuisine,
-        rating: restaurant.rating || 0,
-        color: getRestaurantTypeColor(restaurant.type),
-        isOwned: user && restaurant.ownerId === user.uid,
-        isFavorite: user?.favoriteRestaurants?.includes(restaurant.id)
-      }))
-    };
-
-    const message = JSON.stringify({ type: 'updateMarkers', data: mapData });
-    webViewRef.current.postMessage(message);
-  };
-
-  const handleMapMessage = (event) => {
-    try {
-      const message = JSON.parse(event.nativeEvent.data);
-      
-      if (message.type === 'markerClick') {
-        const restaurant = restaurants.find(r => r.id === message.restaurantId);
-        if (restaurant) {
-          navigation.navigate('RestaurantDetail', { restaurant });
-        }
-      } else if (message.type === 'mapReady') {
-        console.log('Map is ready');
-        updateMapMarkers();
-      }
-    } catch (error) {
-      console.error('Error handling map message:', error);
-    }
-  };
-
-  const generateMapHTML = () => {
-    const centerLat = mapRegion?.latitude || FALLBACK_REGION.latitude;
-    const centerLng = mapRegion?.longitude || FALLBACK_REGION.longitude;
-
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
-          <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
-          <style>
-            #map { 
-              height: 100vh; 
-              margin: 0; 
-              padding: 0; 
-              width: 100%;
-            }
-            html, body { 
-              margin: 0; 
-              padding: 0; 
-              height: 100%;
-            }
-            .custom-marker {
-              background: white;
-              border: 3px solid;
-              border-radius: 50%;
-              width: 35px;
-              height: 35px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              font-size: 14px;
-              position: relative;
-              font-weight: bold;
-              box-shadow: 0 2px 6px rgba(0,0,0,0.3);
-            }
-            .marker-badge {
-              position: absolute;
-              top: -3px;
-              right: -3px;
-              width: 14px;
-              height: 14px;
-              border-radius: 50%;
-              border: 2px solid white;
-              font-size: 8px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-            }
-            .owner-badge { 
-              background: #4CAF50; 
-              color: white;
-            }
-            .favorite-badge { 
-              background: #FF6B35; 
-              color: white;
-            }
-            .type-marker {
-              position: absolute;
-              bottom: -5px;
-              left: 50%;
-              transform: translateX(-50%);
-              padding: 2px 6px;
-              border-radius: 8px;
-              font-size: 8px;
-              font-weight: bold;
-              color: white;
-              white-space: nowrap;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-            }
-          </style>
-        </head>
-        <body>
-          <div id="map"></div>
-          <script>
-            let map;
-            let markers = [];
-
-            function initMap() {
-              map = L.map('map').setView([${centerLat}, ${centerLng}], 13);
-              
-              L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-              }).addTo(map);
-
-              // Notify React Native that map is ready
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'mapReady'
-                }));
-              }
-            }
-
-            function clearMarkers() {
-              markers.forEach(marker => map.removeLayer(marker));
-              markers = [];
-            }
-
-            function addUserLocation(position) {
-              if (position) {
-                const userMarker = L.marker(position, {
-                  icon: L.divIcon({
-                    className: 'custom-marker',
-                    html: '<div style="background: #2196F3; color: white; border-color: #2196F3;">📍</div>',
-                    iconSize: [30, 30],
-                    iconAnchor: [15, 15]
-                  })
-                });
-                
-                userMarker.addTo(map);
-                userMarker.bindPopup("You are here");
-                markers.push(userMarker);
-              }
-            }
-
-            function getRestaurantIcon(type) {
-              const typeIcons = {
-                'Go Green': '🌱',
-                'Fine Dining': '🍽️',
-                'Casual Dining': '🍴',
-                'Cafe': '☕',
-                'Fast Food': '🍟',
-                'Buffet': '🍽️',
-                'Food Truck': '🚚',
-                'Bakery': '🥖',
-                'Dessert Shop': '🍨',
-                'Bar': '🍺',
-                'Pub': '🍻'
-              };
-              return typeIcons[type] || '🍽️';
-            }
-
-            function getTypeAbbreviation(type) {
-              const abbreviations = {
-                'Go Green': 'GG',
-                'Fine Dining': 'FD',
-                'Casual Dining': 'CD',
-                'Cafe': 'CF',
-                'Fast Food': 'FF',
-                'Buffet': 'BF',
-                'Food Truck': 'FT',
-                'Bakery': 'BK',
-                'Dessert Shop': 'DS',
-                'Bar': 'BR',
-                'Pub': 'PB'
-              };
-              return abbreviations[type] || type.substring(0, 2).toUpperCase();
-            }
-
-            function addRestaurantMarkers(restaurants) {
-              restaurants.forEach(restaurant => {
-                const icon = getRestaurantIcon(restaurant.type);
-                const typeAbbr = getTypeAbbreviation(restaurant.type);
-                
-                const markerIcon = L.divIcon({
-                  className: 'custom-marker',
-                  html: \`
-                    <div style="border-color: \${restaurant.color}; background: \${restaurant.color}; color: white;">
-                      \${icon}
-                      \${restaurant.isOwned ? '<div class="marker-badge owner-badge">✓</div>' : ''}
-                      \${restaurant.isFavorite && !restaurant.isOwned ? '<div class="marker-badge favorite-badge">♥</div>' : ''}
-                      <div class="type-marker" style="background: \${restaurant.color};">\${typeAbbr}</div>
-                    </div>
-                  \`,
-                  iconSize: [35, 35],
-                  iconAnchor: [17, 17]
-                });
-
-                const marker = L.marker(restaurant.position, { icon: markerIcon });
-                
-                marker.bindPopup(\`
-                  <div style="min-width: 200px;">
-                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                      <div style="background: \${restaurant.color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-right: 8px;">
-                        \${restaurant.type}
-                      </div>
-                      \${restaurant.isOwned ? '<div style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 8px; font-size: 10px;">OWNED</div>' : ''}
-                    </div>
-                    <strong style="font-size: 16px;">\${restaurant.name}</strong><br/>
-                    <div style="color: #666; margin: 4px 0;">\${restaurant.cuisine}</div>
-                    <div style="display: flex; align-items: center; margin-top: 8px;">
-                      <span style="color: #FFD700;">★</span>
-                      <span style="margin-left: 4px;">\${restaurant.rating.toFixed(1)}</span>
-                      \${restaurant.isFavorite ? '<span style="color: #FF6B35; margin-left: 8px;">♥ Favorite</span>' : ''}
-                    </div>
-                  </div>
-                \`);
-
-                marker.on('click', () => {
-                  if (window.ReactNativeWebView) {
-                    window.ReactNativeWebView.postMessage(JSON.stringify({
-                      type: 'markerClick',
-                      restaurantId: restaurant.id
-                    }));
-                  }
-                });
-
-                marker.addTo(map);
-                markers.push(marker);
-              });
-            }
-
-            function updateMarkers(data) {
-              clearMarkers();
-              
-              if (data.center) {
-                map.setView(data.center, 13);
-              }
-
-              if (data.userLocation) {
-                addUserLocation(data.userLocation);
-              }
-
-              if (data.restaurants) {
-                addRestaurantMarkers(data.restaurants);
-              }
-            }
-
-            // Handle messages from React Native
-            document.addEventListener('message', function(event) {
-              try {
-                const message = JSON.parse(event.data);
-                if (message.type === 'updateMarkers') {
-                  updateMarkers(message.data);
-                }
-              } catch (error) {
-                console.error('Error handling message:', error);
-              }
-            });
-
-            // For Android
-            window.addEventListener('message', function(event) {
-              try {
-                const message = JSON.parse(event.data);
-                if (message.type === 'updateMarkers') {
-                  updateMarkers(message.data);
-                }
-              } catch (error) {
-                console.error('Error handling message:', error);
-              }
-            });
-
-            // Initialize map when page loads
-            initMap();
-          </script>
-        </body>
-      </html>
-    `;
+  const getRestaurantTypeColor = (type) => {
+    if (!type) return "#000";
+    return RESTAURANT_TYPE_COLORS[type] || "#000";
   };
 
   // Get available restaurant types from current restaurants
@@ -623,30 +330,10 @@ export default function HomeScreen({ navigation }) {
     const isOwner = user && item.ownerId === user.uid;
     const isFavorite = user?.favoriteRestaurants?.includes(item.id);
     const typeColor = getRestaurantTypeColor(item.type);
-    const typeInfo = getRestaurantTypeInfo(item.type);
-    const textColor = getComplementaryColor(item.type);
-
-    // Get restaurant type icon
-    const getTypeIcon = (type) => {
-      const typeIcons = {
-        'Go Green': '🌱',
-        'Fine Dining': '🍽️',
-        'Casual Dining': '🍴',
-        'Cafe': '☕',
-        'Fast Food': '🍟',
-        'Buffet': '🍽️',
-        'Food Truck': '🚚',
-        'Bakery': '🥖',
-        'Dessert Shop': '🍨',
-        'Bar': '🍺',
-        'Pub': '🍻'
-      };
-      return typeIcons[type] || '🍽️';
-    };
 
     return (
       <TouchableOpacity
-        style={[styles.restaurantCard, { borderLeftColor: typeColor, borderLeftWidth: 4 }]}
+        style={styles.restaurantCard}
         onPress={() => navigation.navigate('RestaurantDetail', { restaurant: item })}
       >
         <Image 
@@ -670,26 +357,15 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.restaurantCuisine}>{item.cuisine || 'Cuisine'}</Text>
             {item.type && (
               <View style={[styles.typeBadge, { backgroundColor: typeColor }]}>
-                <Text style={[styles.typeBadgeText, { color: textColor }]}>
-                  {getTypeIcon(item.type)} {item.type}
-                </Text>
+                <Text style={styles.typeBadgeText}>{item.type}</Text>
               </View>
             )}
           </View>
-          
-          {typeInfo?.description && (
-            <Text style={styles.typeDescription}>{typeInfo.description}</Text>
-          )}
           
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={16} color="#FFD700" />
             <Text style={styles.rating}>{item.rating?.toFixed(1) || '0.0'}</Text>
             <Text style={styles.reviewCount}>({item.reviewCount || 0})</Text>
-            <View style={[styles.ratingBadge, { backgroundColor: typeColor }]}>
-              <Text style={[styles.ratingBadgeText, { color: textColor }]}>
-                {item.type || 'Restaurant'}
-              </Text>
-            </View>
           </View>
           <Text style={styles.address}>
             {item.location?.address || 'Address not available'}
@@ -700,18 +376,73 @@ export default function HomeScreen({ navigation }) {
         </View>
         <View style={styles.favoriteContainer}>
           <TouchableOpacity 
-            style={[styles.favoriteButton, isFavorite && { backgroundColor: typeColor }]}
+            style={styles.favoriteButton}
             onPress={() => handleFavoriteToggle(item.id)}
           >
             <Ionicons 
               name={isFavorite ? "heart" : "heart-outline"} 
               size={20} 
-              color={isFavorite ? textColor : "#ccc"}
+              color={isFavorite ? "#FF6B35" : "#ccc"}
             />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
+  };
+
+  const renderMapMarkers = () => {
+    if (!filteredRestaurants || filteredRestaurants.length === 0) {
+      return null;
+    }
+
+    return filteredRestaurants
+      .filter(isValidRestaurant)
+      .map((restaurant) => {
+        const isOwner = user && restaurant.ownerId === user.uid;
+        const isFavorite = user?.favoriteRestaurants?.includes(restaurant.id);
+        const typeColor = getRestaurantTypeColor(restaurant.type);
+        const iconColor = (restaurant.type ? typeColor : "#000");
+        
+        return (
+          <Marker
+            key={restaurant.id}
+            coordinate={{
+              latitude: restaurant.location.latitude,
+              longitude: restaurant.location.longitude,
+            }}
+            title={restaurant.name}
+            description={`${restaurant.type || 'Restaurant'} • ${restaurant.cuisine} • ${restaurant.rating?.toFixed(1) || '0.0'} ⭐`}
+            onCalloutPress={() => navigation.navigate('RestaurantDetail', { restaurant })}
+          >
+            <View style={[
+              styles.markerContainer, 
+              { borderColor: restaurant.type ? typeColor : "#000" },
+              isOwner && styles.ownedMarkerContainer
+            ]}>
+              <Ionicons 
+                name="restaurant" 
+                size={24} 
+                color={iconColor}
+              />
+              {isOwner && (
+                <View style={styles.ownerMarkerBadge}>
+                  <Ionicons name="checkmark" size={12} color="#fff" />
+                </View>
+              )}
+              {isFavorite && !isOwner && (
+                <View style={[styles.favoriteMarkerBadge, { backgroundColor: restaurant.type ? typeColor : "#FF6B35" }]}>
+                  <Ionicons name="heart" size={10} color="#fff" />
+                </View>
+              )}
+              {restaurant.type && (
+                <View style={[styles.typeMarkerBadge, { backgroundColor: typeColor }]}>
+                  <Text style={styles.typeMarkerText}>{restaurant.type.charAt(0)}</Text>
+                </View>
+              )}
+            </View>
+          </Marker>
+        );
+      });
   };
 
   if (loading || locationLoading) {
@@ -803,29 +534,20 @@ export default function HomeScreen({ navigation }) {
       )}
 
       {showMap ? (
-        <WebView
-          ref={webViewRef}
-          source={{ html: generateMapHTML() }}
-          style={styles.map}
-          onMessage={handleMapMessage}
-          onError={(syntheticEvent) => {
-            const { nativeEvent } = syntheticEvent;
-            console.error('WebView error: ', nativeEvent);
+        <MapView 
+          style={styles.map} 
+          region={mapRegion}
+          // provider={PROVIDER_GOOGLE}
+          showsUserLocation={!!userLocation}
+          showsMyLocationButton={true}
+          onRegionChangeComplete={setMapRegion}
+          onError={(error) => {
+            console.error('MapView error:', error);
             Alert.alert('Map Error', 'There was an issue loading the map. Please try again.');
           }}
-          onLoadEnd={() => {
-            console.log('WebView loaded');
-          }}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          startInLoadingState={true}
-          renderLoading={() => (
-            <View style={styles.webViewLoading}>
-              <ActivityIndicator size="large" color="#FF6B35" />
-              <Text>Loading map...</Text>
-            </View>
-          )}
-        />
+        >
+          {renderMapMarkers()}
+        </MapView>
       ) : (
         <FlatList
           data={filteredRestaurants}
@@ -894,12 +616,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#999',
     textAlign: 'center',
-  },
-  webViewLoading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#f8f8f8',
   },
   header: {
     flexDirection: 'row',
@@ -1044,6 +760,58 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  markerContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 8,
+    borderWidth: 2,
+    position: 'relative',
+  },
+  ownedMarkerContainer: {
+    borderColor: '#4CAF50',
+  },
+  ownerMarkerBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#4CAF50',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  favoriteMarkerBadge: {
+    position: 'absolute',
+    top: -3,
+    left: -3,
+    borderRadius: 8,
+    width: 16,
+    height: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  typeMarkerBadge: {
+    position: 'absolute',
+    bottom: -5,
+    right: -5,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+  },
+  typeMarkerText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   restaurantList: {
     flex: 1,
