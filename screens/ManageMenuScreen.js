@@ -205,7 +205,7 @@ export default function ManageMenuScreen({ route, navigation }) {
           <Text style={styles.menuItemCategory}>{item.category}</Text>
           <Text style={styles.menuItemDescription}>{item.description}</Text>
           <View style={styles.menuItemStats}>
-            <Text style={styles.menuItemPrice}>Rs. {item.price}</Text>
+            <Text style={styles.menuItemPrice}>£. {item.price}</Text>
             <View style={styles.calorieContainer}>
               <Ionicons name="flame-outline" size={14} color="#FF6B35" />
               <Text style={styles.calorieText}>{item.calories || 0} cal</Text>
@@ -370,7 +370,7 @@ export default function ManageMenuScreen({ route, navigation }) {
 
                 <View style={styles.rowContainer}>
                   <View style={styles.halfInputContainer}>
-                    <Text style={styles.inputLabel}>Price (Rs.) *</Text>
+                    <Text style={styles.inputLabel}>Price (£.) *</Text>
                     <TextInput
                       style={styles.input}
                       placeholder="0.00"

@@ -1,4 +1,4 @@
-// screens/AddRestaurantScreen.js - Updated with WebView-based map
+// screens/AddRestaurantScreen.js - Updated with Go Green feature and GBP currency
 import React, { useState, useRef } from 'react';
 import {
   View,
@@ -19,7 +19,7 @@ import * as Location from 'expo-location';
 import { WebView } from 'react-native-webview';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
-import { getAllRestaurantTypes, getRestaurantTypeColor, getComplementaryColor } from '../utils/restaurantTypes';
+import { getAllRestaurantTypes, getRestaurantTypeColor, getComplementaryColor, GO_GREEN_CONFIG } from '../utils/restaurantTypes';
 
 const { width, height } = Dimensions.get('window');
 
@@ -35,13 +35,14 @@ export default function AddRestaurantScreen({ navigation }) {
   const [formData, setFormData] = useState({
     name: '',
     cuisine: '',
-    type: '', // Added restaurant type
+    type: '',
     description: '',
     phone: '',
     email: '',
     address: '',
     latitude: null,
-    longitude: null
+    longitude: null,
+    isGoGreen: false, // Added Go Green option
   });
 
   const cuisineTypes = [
@@ -313,7 +314,7 @@ export default function AddRestaurantScreen({ navigation }) {
     setShowMapPicker(true);
   };
 
-  // Generate map HTML for location picker
+  // Generate map HTML for location picker (same as original)
   const generateMapPickerHTML = () => {
     const centerLat = tempLocation?.latitude || 33.6844;
     const centerLng = tempLocation?.longitude || 73.0479;
@@ -764,10 +765,11 @@ export default function AddRestaurantScreen({ navigation }) {
       const restaurantData = {
         name: formData.name.trim(),
         cuisine: formData.cuisine,
-        type: formData.type, // Added restaurant type
+        type: formData.type,
         description: formData.description.trim(),
         phone: formData.phone.trim(),
         email: formData.email.trim(),
+        isGoGreen: formData.isGoGreen, // Include Go Green status
         location: {
           address: formData.address.trim(),
           latitude: formData.latitude,
@@ -801,7 +803,8 @@ export default function AddRestaurantScreen({ navigation }) {
                   email: '',
                   address: '',
                   latitude: null,
-                  longitude: null
+                  longitude: null,
+                  isGoGreen: false,
                 });
                 setImageUri(null);
               }
@@ -981,6 +984,62 @@ export default function AddRestaurantScreen({ navigation }) {
           </View>
         </View>
 
+        {/* Go Green Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Go Green Initiative</Text>
+          <Text style={styles.sectionSubtitle}>
+            Join our environmental sustainability program to attract eco-conscious customers
+          </Text>
+          
+          <TouchableOpacity
+            style={[
+              styles.goGreenContainer,
+              formData.isGoGreen && { 
+                backgroundColor: GO_GREEN_CONFIG.badgeColor,
+                borderColor: GO_GREEN_CONFIG.color 
+              }
+            ]}
+            onPress={() => handleInputChange('isGoGreen', !formData.isGoGreen)}
+          >
+            <View style={styles.goGreenContent}>
+              <Text style={styles.goGreenIcon}>{GO_GREEN_CONFIG.icon}</Text>
+              <View style={styles.goGreenTextContainer}>
+                <Text style={[
+                  styles.goGreenTitle,
+                  formData.isGoGreen && { color: GO_GREEN_CONFIG.textColor }
+                ]}>
+                  Go Green Restaurant
+                </Text>
+                <Text style={styles.goGreenDescription}>
+                  Use eco-friendly packaging, sustainable practices, and local ingredients
+                </Text>
+              </View>
+              <View style={[
+                styles.goGreenCheckbox,
+                formData.isGoGreen && { 
+                  backgroundColor: GO_GREEN_CONFIG.color,
+                  borderColor: GO_GREEN_CONFIG.color 
+                }
+              ]}>
+                {formData.isGoGreen && (
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                )}
+              </View>
+            </View>
+            
+            {formData.isGoGreen && (
+              <View style={styles.goGreenBenefits}>
+                <Text style={styles.goGreenBenefitsTitle}>Your customers will save per order:</Text>
+                <View style={styles.benefitsList}>
+                  <Text style={styles.benefitItem}>🌍 {GO_GREEN_CONFIG.carbonSavingsPerMeal}kg CO₂ emissions</Text>
+                  <Text style={styles.benefitItem}>♻️ {GO_GREEN_CONFIG.plasticSavingsPerMeal}g plastic waste</Text>
+                  <Text style={styles.benefitItem}>💧 {GO_GREEN_CONFIG.waterSavingsPerMeal}L water usage</Text>
+                </View>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+
         {/* Contact Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
@@ -1117,6 +1176,12 @@ export default function AddRestaurantScreen({ navigation }) {
             <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
             <Text style={styles.benefitText}>Track reviews and ratings</Text>
           </View>
+          {formData.isGoGreen && (
+            <View style={styles.benefitItem}>
+              <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
+              <Text style={styles.benefitText}>Help customers reduce their environmental footprint</Text>
+            </View>
+          )}
         </View>
 
         <TouchableOpacity
@@ -1400,6 +1465,73 @@ const styles = StyleSheet.create({
   },
   selectedTypeChipText: {
     fontWeight: 'bold',
+  },
+  // Go Green Styles
+  goGreenContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: '#e0e0e0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  goGreenContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  goGreenIcon: {
+    fontSize: 24,
+    marginRight: 15,
+  },
+  goGreenTextContainer: {
+    flex: 1,
+  },
+  goGreenTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 4,
+  },
+  goGreenDescription: {
+    fontSize: 12,
+    color: '#666',
+    lineHeight: 16,
+  },
+  goGreenCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#ddd',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  goGreenBenefits: {
+    backgroundColor: '#f8fbf8',
+    padding: 15,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  goGreenBenefitsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginBottom: 10,
+  },
+  benefitsList: {
+    gap: 6,
+  },
+  benefitItem: {
+    fontSize: 12,
+    color: '#2E7D32',
+    lineHeight: 16,
   },
   locationButtons: {
     flexDirection: 'row',

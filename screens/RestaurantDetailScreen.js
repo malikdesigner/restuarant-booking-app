@@ -1,4 +1,4 @@
-// screens/RestaurantDetailScreen.js - Updated with calorie display
+// screens/RestaurantDetailScreen.js - Updated with environmental savings and GBP currency
 import React, { useState } from 'react';
 import {
   View,
@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useData } from '../context/DataContext';
+import { GO_GREEN_CONFIG } from '../utils/restaurantTypes';
 
 export default function RestaurantDetailScreen({ route, navigation }) {
   const { restaurant } = route.params;
@@ -22,6 +23,7 @@ export default function RestaurantDetailScreen({ route, navigation }) {
   const { placeOrder, addToFavorites, removeFromFavorites, addReview } = useData();
   const [cart, setCart] = useState([]);
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showEnvironmentalModal, setShowEnvironmentalModal] = useState(false);
   const [rating, setRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
 
@@ -63,6 +65,23 @@ export default function RestaurantDetailScreen({ route, navigation }) {
     return cart.reduce((total, item) => total + ((item.calories || 0) * item.quantity), 0);
   };
 
+  const getTotalQuantity = () => {
+    return cart.reduce((total, item) => total + item.quantity, 0);
+  };
+
+  // Calculate environmental savings if restaurant is Go Green
+  const getEnvironmentalSavings = () => {
+    if (!restaurant.isGoGreen) return null;
+
+    const totalMeals = getTotalQuantity();
+    return {
+      carbonSaved: (totalMeals * GO_GREEN_CONFIG.carbonSavingsPerMeal).toFixed(2),
+      plasticSaved: (totalMeals * GO_GREEN_CONFIG.plasticSavingsPerMeal).toFixed(0),
+      waterSaved: (totalMeals * GO_GREEN_CONFIG.waterSavingsPerMeal).toFixed(1),
+      totalMeals
+    };
+  };
+
   const handlePlaceOrder = async () => {
     if (!user) {
       navigation.navigate('Login');
@@ -74,22 +93,51 @@ export default function RestaurantDetailScreen({ route, navigation }) {
       return;
     }
 
+    // Show environmental impact if Go Green restaurant
+    if (restaurant.isGoGreen) {
+      const savings = getEnvironmentalSavings();
+      Alert.alert(
+        'Environmental Impact',
+        `By ordering from this Go Green restaurant, you'll help save:\n\n🌍 ${savings.carbonSaved}kg CO₂ emissions\n♻️ ${savings.plasticSaved}g plastic waste\n💧 ${savings.waterSaved}L water\n\nContinue with order?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Place Order', onPress: () => submitOrder() }
+        ]
+      );
+    } else {
+      submitOrder();
+    }
+  };
+
+  const submitOrder = async () => {
     const orderData = {
       restaurantId: restaurant.id,
       restaurantName: restaurant.name,
       restaurantImage: restaurant.image,
       items: cart,
       totalPrice: getTotalPrice(),
-      totalCalories: getTotalCalories(), // Include total calories in order
+      totalCalories: getTotalCalories(),
       deliveryAddress: user.address,
+      isGoGreen: restaurant.isGoGreen || false,
+      environmentalSavings: restaurant.isGoGreen ? getEnvironmentalSavings() : null,
     };
 
     const result = await placeOrder(orderData);
     if (result.success) {
       setCart([]);
-      Alert.alert('Order Placed', 'Your order has been placed successfully!', [
-        { text: 'OK', onPress: () => navigation.navigate('Orders') }
-      ]);
+      
+      if (restaurant.isGoGreen) {
+        const savings = getEnvironmentalSavings();
+        Alert.alert(
+          'Order Placed Successfully!',
+          `Thank you for choosing a Go Green restaurant!\n\nYour environmental impact:\n🌍 ${savings.carbonSaved}kg CO₂ saved\n♻️ ${savings.plasticSaved}g plastic saved\n💧 ${savings.waterSaved}L water saved`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Orders') }]
+        );
+      } else {
+        Alert.alert('Order Placed', 'Your order has been placed successfully!', [
+          { text: 'OK', onPress: () => navigation.navigate('Orders') }
+        ]);
+      }
     } else {
       Alert.alert('Error', 'Failed to place order. Please try again.');
     }
@@ -144,7 +192,7 @@ export default function RestaurantDetailScreen({ route, navigation }) {
           <Text style={styles.menuItemName}>{item.name}</Text>
           <Text style={styles.menuItemDescription}>{item.description}</Text>
           <View style={styles.menuItemPricing}>
-            <Text style={styles.menuItemPrice}>Rs. {item.price}</Text>
+            <Text style={styles.menuItemPrice}>£{item.price}</Text>
             {itemCalories > 0 && (
               <View style={styles.calorieContainer}>
                 <Ionicons name="flame-outline" size={14} color="#FF6B35" />
@@ -208,7 +256,86 @@ export default function RestaurantDetailScreen({ route, navigation }) {
     );
   };
 
+  const renderEnvironmentalModal = () => {
+    const savings = getEnvironmentalSavings();
+    if (!savings) return null;
+
+    return (
+      <Modal
+        visible={showEnvironmentalModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowEnvironmentalModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.environmentalModalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.environmentalModalTitle}>Your Environmental Impact</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowEnvironmentalModal(false)}
+              >
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.environmentalStats}>
+              <Text style={styles.environmentalDescription}>
+                By ordering {savings.totalMeals} meal{savings.totalMeals !== 1 ? 's' : ''} from this Go Green restaurant, you'll help save:
+              </Text>
+
+              <View style={styles.savingsGrid}>
+                <View style={styles.savingsItem}>
+                  <Text style={styles.savingsIcon}>🌍</Text>
+                  <Text style={styles.savingsValue}>{savings.carbonSaved}kg</Text>
+                  <Text style={styles.savingsLabel}>CO₂ Emissions</Text>
+                </View>
+
+                <View style={styles.savingsItem}>
+                  <Text style={styles.savingsIcon}>♻️</Text>
+                  <Text style={styles.savingsValue}>{savings.plasticSaved}g</Text>
+                  <Text style={styles.savingsLabel}>Plastic Waste</Text>
+                </View>
+
+                <View style={styles.savingsItem}>
+                  <Text style={styles.savingsIcon}>💧</Text>
+                  <Text style={styles.savingsValue}>{savings.waterSaved}L</Text>
+                  <Text style={styles.savingsLabel}>Water Usage</Text>
+                </View>
+              </View>
+
+              <View style={styles.impactExplanation}>
+                <Text style={styles.impactTitle}>How Go Green Works:</Text>
+                <Text style={styles.impactText}>
+                  • Eco-friendly packaging reduces plastic waste
+                </Text>
+                <Text style={styles.impactText}>
+                  • Local sourcing cuts transportation emissions
+                </Text>
+                <Text style={styles.impactText}>
+                  • Sustainable practices conserve water
+                </Text>
+                <Text style={styles.impactText}>
+                  • Energy-efficient operations lower carbon footprint
+                </Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.environmentalCloseButton}
+              onPress={() => setShowEnvironmentalModal(false)}
+            >
+              <Text style={styles.environmentalCloseButtonText}>Great! Continue Shopping</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   const totalCalories = getTotalCalories();
+  const totalQuantity = getTotalQuantity();
+  const environmentalSavings = getEnvironmentalSavings();
 
   return (
     <View style={styles.container}>
@@ -236,8 +363,28 @@ export default function RestaurantDetailScreen({ route, navigation }) {
         <Image source={{ uri: restaurant.image }} style={styles.restaurantImage} />
         
         <View style={styles.restaurantInfo}>
-          <Text style={styles.restaurantName}>{restaurant.name}</Text>
+          <View style={styles.restaurantNameContainer}>
+            <Text style={styles.restaurantName}>{restaurant.name}</Text>
+            {restaurant.isGoGreen && (
+              <TouchableOpacity
+                style={styles.goGreenBadge}
+                onPress={() => setShowEnvironmentalModal(true)}
+              >
+                <Text style={styles.goGreenBadgeText}>
+                  {GO_GREEN_CONFIG.icon} GO GREEN
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          
           <Text style={styles.restaurantCuisine}>{restaurant.cuisine}</Text>
+          
+          {restaurant.isGoGreen && (
+            <Text style={styles.goGreenDescription}>
+              ♻️ Eco-friendly practices • Sustainable packaging • Local ingredients
+            </Text>
+          )}
+          
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={18} color="#FFD700" />
             <Text style={styles.rating}>{restaurant.rating?.toFixed(1) || '0.0'}</Text>
@@ -275,21 +422,36 @@ export default function RestaurantDetailScreen({ route, navigation }) {
         <View style={styles.cartSummary}>
           <View style={styles.cartInfo}>
             <View style={styles.cartPriceRow}>
-              <Text style={styles.cartTotal}>Total: Rs. {getTotalPrice()}</Text>
+              <Text style={styles.cartTotal}>Total: £{getTotalPrice().toFixed(2)}</Text>
               <Text style={styles.cartItems}>{cart.length} items</Text>
             </View>
-            {totalCalories > 0 && (
-              <View style={styles.cartCaloriesRow}>
-                <Ionicons name="flame" size={16} color="#FF6B35" />
-                <Text style={styles.cartCalories}>{totalCalories} calories</Text>
-              </View>
-            )}
+            <View style={styles.cartDetailsRow}>
+              {totalCalories > 0 && (
+                <View style={styles.cartCaloriesRow}>
+                  <Ionicons name="flame" size={16} color="#FF6B35" />
+                  <Text style={styles.cartCalories}>{totalCalories} calories</Text>
+                </View>
+              )}
+              {restaurant.isGoGreen && environmentalSavings && (
+                <TouchableOpacity 
+                  style={styles.environmentalButton}
+                  onPress={() => setShowEnvironmentalModal(true)}
+                >
+                  <Text style={styles.environmentalButtonText}>
+                    🌱 {environmentalSavings.carbonSaved}kg CO₂ saved
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
           <TouchableOpacity style={styles.orderButton} onPress={handlePlaceOrder}>
             <Text style={styles.orderButtonText}>Place Order</Text>
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Environmental Impact Modal */}
+      {renderEnvironmentalModal()}
 
       {/* Review Modal */}
       <Modal
@@ -376,16 +538,41 @@ const styles = StyleSheet.create({
   restaurantInfo: {
     padding: 20,
   },
+  restaurantNameContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 5,
+  },
   restaurantName: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 5,
+    flex: 1,
+  },
+  goGreenBadge: {
+    backgroundColor: GO_GREEN_CONFIG.badgeColor,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: GO_GREEN_CONFIG.color,
+  },
+  goGreenBadgeText: {
+    color: GO_GREEN_CONFIG.textColor,
+    fontSize: 12,
+    fontWeight: 'bold',
   },
   restaurantCuisine: {
     fontSize: 16,
     color: '#666',
     marginBottom: 8,
+  },
+  goGreenDescription: {
+    fontSize: 13,
+    color: '#4CAF50',
+    marginBottom: 8,
+    fontWeight: '500',
   },
   ratingContainer: {
     flexDirection: 'row',
@@ -553,16 +740,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
   },
-  cartCaloriesRow: {
+  cartDetailsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: 4,
+    gap: 10,
+  },
+  cartCaloriesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   cartCalories: {
     fontSize: 14,
     color: '#FF6B35',
     fontWeight: '600',
     marginLeft: 4,
+  },
+  environmentalButton: {
+    backgroundColor: GO_GREEN_CONFIG.badgeColor,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  environmentalButtonText: {
+    fontSize: 12,
+    color: GO_GREEN_CONFIG.textColor,
+    fontWeight: '600',
   },
   orderButton: {
     backgroundColor: '#FF6B35',
@@ -590,6 +793,14 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 400,
   },
+  environmentalModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -601,8 +812,76 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
+  environmentalModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
   closeButton: {
     padding: 5,
+  },
+  environmentalStats: {
+    alignItems: 'center',
+  },
+  environmentalDescription: {
+    fontSize: 16,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  savingsGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 20,
+  },
+  savingsItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  savingsIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  savingsValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+    marginBottom: 4,
+  },
+  savingsLabel: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+  },
+  impactExplanation: {
+    backgroundColor: '#f0f8f0',
+    padding: 15,
+    borderRadius: 8,
+    width: '100%',
+  },
+  impactTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 10,
+  },
+  impactText: {
+    fontSize: 14,
+    color: '#2E7D32',
+    marginBottom: 4,
+  },
+  environmentalCloseButton: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 15,
+  },
+  environmentalCloseButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   ratingLabel: {
     fontSize: 16,

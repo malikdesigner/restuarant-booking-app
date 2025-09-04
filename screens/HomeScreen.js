@@ -1,4 +1,4 @@
-// screens/HomeScreen.js - Updated with WebView-based map
+// screens/HomeScreen.js - Updated with Go Green filter and GBP currency
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -23,7 +23,9 @@ import {
   getRestaurantTypeColor,
   getAllRestaurantTypes,
   getRestaurantTypeInfo,
-  getComplementaryColor
+  getComplementaryColor,
+  getGoGreenRestaurants,
+  GO_GREEN_CONFIG
 } from '../utils/restaurantTypes';
 
 const { width, height } = Dimensions.get('window');
@@ -36,8 +38,6 @@ const FALLBACK_REGION = {
   longitudeDelta: 0.1,
 };
 
-  // Remove the local RESTAURANT_TYPE_COLORS definition since we're importing it
-
 export default function HomeScreen({ navigation }) {
   const { restaurants, loading, toggleFavorite } = useData();
   const { user } = useAuth();
@@ -45,6 +45,7 @@ export default function HomeScreen({ navigation }) {
   const [userLocation, setUserLocation] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTypeFilter, setSelectedTypeFilter] = useState('All');
+  const [selectedGoGreenFilter, setSelectedGoGreenFilter] = useState('All'); // New Go Green filter
   const [filteredRestaurants, setFilteredRestaurants] = useState([]);
   const [mapRegion, setMapRegion] = useState(null);
   const [locationLoading, setLocationLoading] = useState(true);
@@ -56,7 +57,7 @@ export default function HomeScreen({ navigation }) {
 
   useEffect(() => {
     filterRestaurants();
-  }, [restaurants, searchQuery, selectedTypeFilter]);
+  }, [restaurants, searchQuery, selectedTypeFilter, selectedGoGreenFilter]);
 
   useEffect(() => {
     // Update map when filtered restaurants change
@@ -160,6 +161,13 @@ export default function HomeScreen({ navigation }) {
         restaurant.type === selectedTypeFilter
       );
     }
+
+    // Apply Go Green filter
+    if (selectedGoGreenFilter === 'Go Green Only') {
+      filtered = filtered.filter(restaurant => restaurant.isGoGreen === true);
+    } else if (selectedGoGreenFilter === 'Non-Go Green') {
+      filtered = filtered.filter(restaurant => restaurant.isGoGreen !== true);
+    }
     
     setFilteredRestaurants(filtered);
   };
@@ -190,8 +198,6 @@ export default function HomeScreen({ navigation }) {
            restaurant.location.longitude <= 180;
   };
 
-  // Use the imported function directly - remove the local wrapper
-
   const updateMapMarkers = () => {
     if (!webViewRef.current || !mapRegion) return;
 
@@ -209,7 +215,8 @@ export default function HomeScreen({ navigation }) {
         rating: restaurant.rating || 0,
         color: getRestaurantTypeColor(restaurant.type),
         isOwned: user && restaurant.ownerId === user.uid,
-        isFavorite: user?.favoriteRestaurants?.includes(restaurant.id)
+        isFavorite: user?.favoriteRestaurants?.includes(restaurant.id),
+        isGoGreen: restaurant.isGoGreen === true
       }))
     };
 
@@ -293,6 +300,10 @@ export default function HomeScreen({ navigation }) {
               background: #FF6B35; 
               color: white;
             }
+            .go-green-badge {
+              background: #4CAF50;
+              color: white;
+            }
             .type-marker {
               position: absolute;
               bottom: -5px;
@@ -351,9 +362,12 @@ export default function HomeScreen({ navigation }) {
               }
             }
 
-            function getRestaurantIcon(type) {
+            function getRestaurantIcon(type, isGoGreen) {
+              if (isGoGreen) {
+                return '🌱';
+              }
+              
               const typeIcons = {
-                'Go Green': '🌱',
                 'Fine Dining': '🍽️',
                 'Casual Dining': '🍴',
                 'Cafe': '☕',
@@ -370,7 +384,6 @@ export default function HomeScreen({ navigation }) {
 
             function getTypeAbbreviation(type) {
               const abbreviations = {
-                'Go Green': 'GG',
                 'Fine Dining': 'FD',
                 'Casual Dining': 'CD',
                 'Cafe': 'CF',
@@ -387,7 +400,7 @@ export default function HomeScreen({ navigation }) {
 
             function addRestaurantMarkers(restaurants) {
               restaurants.forEach(restaurant => {
-                const icon = getRestaurantIcon(restaurant.type);
+                const icon = getRestaurantIcon(restaurant.type, restaurant.isGoGreen);
                 const typeAbbr = getTypeAbbreviation(restaurant.type);
                 
                 const markerIcon = L.divIcon({
@@ -397,6 +410,7 @@ export default function HomeScreen({ navigation }) {
                       \${icon}
                       \${restaurant.isOwned ? '<div class="marker-badge owner-badge">✓</div>' : ''}
                       \${restaurant.isFavorite && !restaurant.isOwned ? '<div class="marker-badge favorite-badge">♥</div>' : ''}
+                      \${restaurant.isGoGreen && !restaurant.isOwned && !restaurant.isFavorite ? '<div class="marker-badge go-green-badge">🌱</div>' : ''}
                       <div class="type-marker" style="background: \${restaurant.color};">\${typeAbbr}</div>
                     </div>
                   \`,
@@ -408,14 +422,16 @@ export default function HomeScreen({ navigation }) {
                 
                 marker.bindPopup(\`
                   <div style="min-width: 200px;">
-                    <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                      <div style="background: \${restaurant.color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px; margin-right: 8px;">
+                    <div style="display: flex; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 4px;">
+                      <div style="background: \${restaurant.color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">
                         \${restaurant.type}
                       </div>
+                      \${restaurant.isGoGreen ? '<div style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 8px; font-size: 10px;">🌱 GO GREEN</div>' : ''}
                       \${restaurant.isOwned ? '<div style="background: #4CAF50; color: white; padding: 2px 6px; border-radius: 8px; font-size: 10px;">OWNED</div>' : ''}
                     </div>
                     <strong style="font-size: 16px;">\${restaurant.name}</strong><br/>
                     <div style="color: #666; margin: 4px 0;">\${restaurant.cuisine}</div>
+                    \${restaurant.isGoGreen ? '<div style="color: #4CAF50; font-size: 12px; margin: 4px 0;">♻️ Eco-friendly restaurant</div>' : ''}
                     <div style="display: flex; align-items: center; margin-top: 8px;">
                       <span style="color: #FFD700;">★</span>
                       <span style="margin-left: 4px;">\${restaurant.rating.toFixed(1)}</span>
@@ -609,6 +625,87 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
+  const renderGoGreenFilter = () => {
+    const goGreenCount = restaurants.filter(r => r.isGoGreen === true).length;
+    const nonGoGreenCount = restaurants.length - goGreenCount;
+    
+    if (goGreenCount === 0) return null;
+
+    return (
+      <View style={styles.goGreenFilterContainer}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <TouchableOpacity
+            style={[
+              styles.goGreenFilterChip,
+              selectedGoGreenFilter === 'All' && styles.selectedGoGreenFilterChip
+            ]}
+            onPress={() => setSelectedGoGreenFilter('All')}
+          >
+            <Text style={[
+              styles.goGreenFilterText,
+              selectedGoGreenFilter === 'All' && styles.selectedGoGreenFilterText
+            ]}>
+              All Restaurants
+            </Text>
+            <View style={styles.goGreenFilterCount}>
+              <Text style={styles.goGreenFilterCountText}>{restaurants.length}</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.goGreenFilterChip,
+              selectedGoGreenFilter === 'Go Green Only' && [
+                styles.selectedGoGreenFilterChip,
+                { backgroundColor: GO_GREEN_CONFIG.color }
+              ]
+            ]}
+            onPress={() => setSelectedGoGreenFilter('Go Green Only')}
+          >
+            <Text style={styles.goGreenIcon}>{GO_GREEN_CONFIG.icon}</Text>
+            <Text style={[
+              styles.goGreenFilterText,
+              selectedGoGreenFilter === 'Go Green Only' && { color: '#fff' }
+            ]}>
+              Go Green Only
+            </Text>
+            <View style={styles.goGreenFilterCount}>
+              <Text style={[
+                styles.goGreenFilterCountText,
+                selectedGoGreenFilter === 'Go Green Only' && { color: '#fff' }
+              ]}>
+                {goGreenCount}
+              </Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.goGreenFilterChip,
+              selectedGoGreenFilter === 'Non-Go Green' && styles.selectedGoGreenFilterChip
+            ]}
+            onPress={() => setSelectedGoGreenFilter('Non-Go Green')}
+          >
+            <Text style={[
+              styles.goGreenFilterText,
+              selectedGoGreenFilter === 'Non-Go Green' && styles.selectedGoGreenFilterText
+            ]}>
+              Traditional
+            </Text>
+            <View style={styles.goGreenFilterCount}>
+              <Text style={[
+                styles.goGreenFilterCountText,
+                selectedGoGreenFilter === 'Non-Go Green' && { color: '#fff' }
+              ]}>
+                {nonGoGreenCount}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  };
+
   const renderRestaurantCard = ({ item }) => {
     if (!item) return null;
 
@@ -629,7 +726,6 @@ export default function HomeScreen({ navigation }) {
     // Get restaurant type icon
     const getTypeIcon = (type) => {
       const typeIcons = {
-        'Go Green': '🌱',
         'Fine Dining': '🍽️',
         'Casual Dining': '🍴',
         'Cafe': '☕',
@@ -646,7 +742,10 @@ export default function HomeScreen({ navigation }) {
 
     return (
       <TouchableOpacity
-        style={[styles.restaurantCard, { borderLeftColor: typeColor, borderLeftWidth: 4 }]}
+        style={[
+          styles.restaurantCard, 
+          { borderLeftColor: item.isGoGreen ? GO_GREEN_CONFIG.color : typeColor, borderLeftWidth: 4 }
+        ]}
         onPress={() => navigation.navigate('RestaurantDetail', { restaurant: item })}
       >
         <Image 
@@ -659,11 +758,20 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.restaurantInfo}>
           <View style={styles.restaurantHeader}>
             <Text style={styles.restaurantName}>{item.name || 'Unknown Restaurant'}</Text>
-            {isOwner && (
-              <View style={styles.ownerBadge}>
-                <Text style={styles.ownerBadgeText}>OWNED</Text>
-              </View>
-            )}
+            <View style={styles.restaurantBadges}>
+              {item.isGoGreen && (
+                <View style={[styles.goGreenBadge, { backgroundColor: GO_GREEN_CONFIG.badgeColor }]}>
+                  <Text style={[styles.goGreenBadgeText, { color: GO_GREEN_CONFIG.textColor }]}>
+                    {GO_GREEN_CONFIG.icon} GO GREEN
+                  </Text>
+                </View>
+              )}
+              {isOwner && (
+                <View style={styles.ownerBadge}>
+                  <Text style={styles.ownerBadgeText}>OWNED</Text>
+                </View>
+              )}
+            </View>
           </View>
           
           <View style={styles.restaurantTypeContainer}>
@@ -679,6 +787,12 @@ export default function HomeScreen({ navigation }) {
           
           {typeInfo?.description && (
             <Text style={styles.typeDescription}>{typeInfo.description}</Text>
+          )}
+
+          {item.isGoGreen && (
+            <Text style={styles.goGreenDescription}>
+              ♻️ Eco-friendly practices • Sustainable packaging • Local ingredients
+            </Text>
           )}
           
           <View style={styles.ratingContainer}>
@@ -785,13 +899,22 @@ export default function HomeScreen({ navigation }) {
         )}
       </View>
 
+      {/* Go Green Filter */}
+      {renderGoGreenFilter()}
+
       {/* Restaurant Type Filter */}
       {renderTypeFilter()}
 
       {/* Restaurant Type Legend for Map View */}
-      {showMap && selectedTypeFilter === 'All' && (
+      {showMap && selectedTypeFilter === 'All' && selectedGoGreenFilter === 'All' && (
         <View style={styles.legendContainer}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <View style={styles.legendItem}>
+              <Text style={[styles.legendColorDot, { color: GO_GREEN_CONFIG.color }]}>
+                {GO_GREEN_CONFIG.icon}
+              </Text>
+              <Text style={styles.legendText}>Go Green</Text>
+            </View>
             {Object.entries(RESTAURANT_TYPE_COLORS).map(([type, color]) => (
               <View key={type} style={styles.legendItem}>
                 <View style={[styles.legendColorDot, { backgroundColor: color }]} />
@@ -837,15 +960,19 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.emptyContainer}>
               <Ionicons name="restaurant-outline" size={64} color="#ccc" />
               <Text style={styles.emptyText}>
-                {selectedTypeFilter === 'All' 
-                  ? 'No restaurants found' 
-                  : `No ${selectedTypeFilter} restaurants found`
+                {selectedGoGreenFilter === 'Go Green Only' 
+                  ? 'No Go Green restaurants found' 
+                  : selectedTypeFilter === 'All' 
+                    ? 'No restaurants found' 
+                    : `No ${selectedTypeFilter} restaurants found`
                 }
               </Text>
               <Text style={styles.emptySubtext}>
-                {selectedTypeFilter === 'All' 
-                  ? 'Be the first to add a restaurant!' 
-                  : 'Try searching for a different type or add one yourself!'
+                {selectedGoGreenFilter === 'Go Green Only' 
+                  ? 'Try adding your first Go Green restaurant!' 
+                  : selectedTypeFilter === 'All' 
+                    ? 'Be the first to add a restaurant!' 
+                    : 'Try searching for a different type or add one yourself!'
                 }
               </Text>
               <TouchableOpacity
@@ -963,6 +1090,55 @@ const styles = StyleSheet.create({
   clearButton: {
     padding: 5,
   },
+  // Go Green Filter Styles
+  goGreenFilterContainer: {
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  goGreenFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f8f8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  selectedGoGreenFilterChip: {
+    backgroundColor: '#FF6B35',
+    borderColor: '#FF6B35',
+  },
+  goGreenIcon: {
+    fontSize: 14,
+    marginRight: 6,
+  },
+  goGreenFilterText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+    marginRight: 6,
+  },
+  selectedGoGreenFilterText: {
+    color: '#fff',
+  },
+  goGreenFilterCount: {
+    backgroundColor: '#e0e0e0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+  goGreenFilterCountText: {
+    fontSize: 10,
+    color: '#666',
+    fontWeight: 'bold',
+  },
   // Type Filter Styles
   typeFilterContainer: {
     backgroundColor: '#fff',
@@ -1071,23 +1247,34 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   restaurantHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 4,
+  },
+  restaurantBadges: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
   },
   restaurantName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    flex: 1,
+  },
+  goGreenBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  goGreenBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   ownerBadge: {
     backgroundColor: '#4CAF50',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
-    marginLeft: 8,
   },
   ownerBadgeText: {
     color: '#fff',
@@ -1114,6 +1301,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
+  typeDescription: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 4,
+    fontStyle: 'italic',
+  },
+  goGreenDescription: {
+    fontSize: 11,
+    color: '#4CAF50',
+    marginBottom: 4,
+    fontWeight: '500',
+  },
   ratingContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1129,6 +1328,16 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontSize: 12,
     color: '#999',
+  },
+  ratingBadge: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  ratingBadgeText: {
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   address: {
     fontSize: 12,

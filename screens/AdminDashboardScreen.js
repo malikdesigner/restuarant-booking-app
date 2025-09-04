@@ -103,7 +103,7 @@ export default function AdminDashboardScreen({ navigation }) {
         </Text>
       </View>
       <Text style={styles.orderRestaurant}>{item.restaurantName}</Text>
-      <Text style={styles.orderTotal}>Rs. {item.totalPrice}</Text>
+      <Text style={styles.orderTotal}>£. {item.totalPrice}</Text>
       
       <View style={styles.orderActions}>
         <View style={styles.statusContainer}>
@@ -284,7 +284,7 @@ export default function AdminDashboardScreen({ navigation }) {
               {renderStatCard('Total Orders', stats.totalOrders, 'receipt', '#2196F3')}
               {renderStatCard('Pending Orders', stats.pendingOrders, 'time', '#FFA500')}
               {renderStatCard('Today\'s Orders', stats.todayOrders, 'today', '#9C27B0')}
-              {renderStatCard('Total Revenue', `Rs. ${stats.totalRevenue}`, 'cash', '#FF6B35')}
+              {renderStatCard('Total Revenue', `£. ${stats.totalRevenue}`, 'cash', '#FF6B35')}
             </View>
 
             <View style={styles.quickActions}>

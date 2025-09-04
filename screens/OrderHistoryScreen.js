@@ -94,7 +94,7 @@ export default function UserOrderHistoryScreen({ navigation }) {
         <View style={styles.orderDetails}>
           <View style={styles.orderDetailRow}>
             <Text style={styles.itemsText}>{totalItems} items</Text>
-            <Text style={styles.totalPrice}>Rs. {item.totalPrice}</Text>
+            <Text style={styles.totalPrice}>£. {item.totalPrice}</Text>
           </View>
           {totalCalories > 0 && (
             <View style={styles.calorieRow}>
@@ -197,7 +197,7 @@ export default function UserOrderHistoryScreen({ navigation }) {
                   </View>
                   <View style={styles.itemQuantityPrice}>
                     <Text style={styles.itemQuantity}>x{item.quantity}</Text>
-                    <Text style={styles.itemPrice}>Rs. {item.price * item.quantity}</Text>
+                    <Text style={styles.itemPrice}>£. {item.price * item.quantity}</Text>
                   </View>
                 </View>
               );
@@ -207,15 +207,15 @@ export default function UserOrderHistoryScreen({ navigation }) {
           <View style={styles.totalSection}>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Subtotal</Text>
-              <Text style={styles.totalValue}>Rs. {selectedOrder.totalPrice}</Text>
+              <Text style={styles.totalValue}>£. {selectedOrder.totalPrice}</Text>
             </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Delivery Fee</Text>
-              <Text style={styles.totalValue}>Rs. 50</Text>
+              <Text style={styles.totalValue}>£. 50</Text>
             </View>
             <View style={[styles.totalRow, styles.grandTotalRow]}>
               <Text style={styles.grandTotalLabel}>Total</Text>
-              <Text style={styles.grandTotalValue}>Rs. {selectedOrder.totalPrice + 50}</Text>
+              <Text style={styles.grandTotalValue}>£. {selectedOrder.totalPrice + 50}</Text>
             </View>
             {totalCalories > 0 && (
               <View style={[styles.totalRow, styles.calorieTotal]}>

@@ -1,7 +1,6 @@
-// utils/restaurantTypes.js - Restaurant types configuration and utilities
+// utils/restaurantTypes.js - Updated without Go Green as a type
 
 export const RESTAURANT_TYPES = [
-  { name: 'Go Green', color: '#4CAF50', description: 'Eco-friendly and sustainable dining' },
   { name: 'Fine Dining', color: '#8E24AA', description: 'Upscale restaurants with premium service' },
   { name: 'Casual Dining', color: '#FF7043', description: 'Relaxed atmosphere with table service' },
   { name: 'Cafe', color: '#795548', description: 'Coffee shops and light meals' },
@@ -13,6 +12,17 @@ export const RESTAURANT_TYPES = [
   { name: 'Bar', color: '#9C27B0', description: 'Drinks and bar food' },
   { name: 'Pub', color: '#607D8B', description: 'Casual drinking establishment with food' }
 ];
+
+// Go Green configuration - separate from restaurant types
+export const GO_GREEN_CONFIG = {
+  color: '#4CAF50',
+  badgeColor: '#E8F5E8',
+  textColor: '#2E7D32',
+  icon: '🌱',
+  carbonSavingsPerMeal: 0.85, // kg CO2 saved per meal
+  plasticSavingsPerMeal: 12,   // grams of plastic saved per meal
+  waterSavingsPerMeal: 15,     // liters of water saved per meal
+};
 
 // Create a color mapping object for quick lookups
 export const RESTAURANT_TYPE_COLORS = RESTAURANT_TYPES.reduce((acc, type) => {
@@ -74,6 +84,15 @@ export const getRestaurantsByType = (restaurants, type) => {
 };
 
 /**
+ * Get Go Green restaurants
+ * @param {array} restaurants - Array of restaurant objects
+ * @returns {array} - Filtered array of Go Green restaurants
+ */
+export const getGoGreenRestaurants = (restaurants) => {
+  return restaurants.filter(restaurant => restaurant.isGoGreen === true);
+};
+
+/**
  * Group restaurants by their types
  * @param {array} restaurants - Array of restaurant objects
  * @returns {object} - Object with type names as keys and arrays of restaurants as values
@@ -127,6 +146,34 @@ export const getRestaurantTypeStats = (restaurants) => {
     totalWithType,
     totalRestaurants: restaurants.length,
     withoutType: restaurants.length - totalWithType
+  };
+};
+
+/**
+ * Calculate environmental savings from Go Green restaurants
+ * @param {array} orders - Array of order objects
+ * @param {array} restaurants - Array of restaurant objects
+ * @returns {object} - Environmental savings statistics
+ */
+export const calculateEnvironmentalSavings = (orders, restaurants) => {
+  const goGreenOrders = orders.filter(order => {
+    const restaurant = restaurants.find(r => r.id === order.restaurantId);
+    return restaurant?.isGoGreen === true && order.status === 'delivered';
+  });
+
+  const totalMeals = goGreenOrders.reduce((sum, order) => 
+    sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0
+  );
+
+  return {
+    totalGoGreenOrders: goGreenOrders.length,
+    totalMeals,
+    carbonSaved: (totalMeals * GO_GREEN_CONFIG.carbonSavingsPerMeal).toFixed(2),
+    plasticSaved: (totalMeals * GO_GREEN_CONFIG.plasticSavingsPerMeal).toFixed(0),
+    waterSaved: (totalMeals * GO_GREEN_CONFIG.waterSavingsPerMeal).toFixed(1),
+    carbonSavingsPerMeal: GO_GREEN_CONFIG.carbonSavingsPerMeal,
+    plasticSavingsPerMeal: GO_GREEN_CONFIG.plasticSavingsPerMeal,
+    waterSavingsPerMeal: GO_GREEN_CONFIG.waterSavingsPerMeal,
   };
 };
 
@@ -192,14 +239,17 @@ export const searchRestaurantTypes = (query) => {
 export default {
   RESTAURANT_TYPES,
   RESTAURANT_TYPE_COLORS,
+  GO_GREEN_CONFIG,
   getRestaurantTypeColor,
   getRestaurantTypeInfo,
   getAllRestaurantTypes,
   getRestaurantTypeNames,
   isValidRestaurantType,
   getRestaurantsByType,
+  getGoGreenRestaurants,
   groupRestaurantsByType,
   getRestaurantTypeStats,
+  calculateEnvironmentalSavings,
   getRandomRestaurantType,
   getSortedRestaurantTypes,
   getComplementaryColor,
